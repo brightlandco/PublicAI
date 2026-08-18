@@ -1,0 +1,1 @@
+AI generated quaternion benchmark comparing two methods: direct quaternion rotation of a vector vs. converting the quaternion into a matrix (Mat3) first and rotating vis a sequence of dot products (result: Mat3 is faster).

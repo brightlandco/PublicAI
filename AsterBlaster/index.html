@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<!-- ©2024 Brightland Florida Corporation. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AsterBlaster</title>
+<style>
+    body, html {
+        margin: 0; padding: 0; overflow: hidden;
+        background: #000; font-family: sans-serif;
+    }
+    #ui {
+        position: absolute; top: 0; left: 0; width: 100%;
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px; box-sizing: border-box;
+        color: #fff; font-size: 24px; font-weight: bold;
+        z-index: 9999; pointer-events: none;
+    }
+    #score {
+        color: #0f0; font-size: 32px; text-shadow: 2px 2px 4px #000;
+    }
+    #lives {
+        color: #f0f; font-size: 32px; text-shadow: 2px 2px 4px #000;
+    }
+    #highscoreDisplay {
+        position: absolute; top: 10px; left: 50%;
+        transform: translateX(-50%);
+        color: #ff0; font-size: 36px; font-weight: bold;
+        text-shadow: 2px 2px 4px #000;
+        pointer-events: none; z-index: 9999;
+    }
+    #missilesDisplay {
+        position: absolute; top: 60px; left: 50%;
+        transform: translateX(-50%);
+        color: #ff0; font-size: 28px; font-weight: bold;
+        text-shadow: 2px 2px 4px #000; pointer-events: none; z-index: 9999;
+    }
+    #gameover {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 60px; color: #ff0;
+        text-shadow: 4px 4px 8px #f00; display: none;
+        text-align: center; z-index: 9999; pointer-events: none;
+    }
+    #gameover span {
+        display: block; font-size: 30px;
+        color: #0ff; text-shadow: 2px 2px 4px #00f;
+        margin-top: 20px;
+    }
+    #instructions {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); color: #fff;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        z-index: 9999; pointer-events: auto; text-align: center;
+        font-size: 24px; padding: 20px;
+    }
+    #instructions h1 {
+        color: #ff0; font-size: 48px; margin-bottom: 30px; text-shadow: 2px 2px 4px #000;
+    }
+    #instructions p { margin: 10px 0; }
+    canvas {
+        display: block; margin: 0 auto; background: #000;
+    }
+</style>
+</head>
+<body>
+<div id="ui">
+    <div id="score">Score: 0</div>
+    <div id="lives">Lives: 3</div>
+</div>
+<div id="highscoreDisplay">High Score: 0</div>
+<div id="missilesDisplay">Missiles: 3</div>
+<div id="gameover">GAME OVER<span>Press Space to Restart</span></div>
+<div id="instructions">
+    <h1>AsterBlaster</h1>
+    <p>Controls:</p>
+    <p>Left/Right Arrows: Rotate Ship</p>
+    <p>Up Arrow: Thrust</p>
+    <p>Space: Shoot normal bullet</p>
+    <p>F: Fire guided missile (if available)</p>
+    <p>Destroy asteroids & UFOs, collect power-ups (+5 missiles each)</p>
+    <p>Every 500 points: +1 life</p>
+    <p>Press Space to Begin</p>
+</div>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+// Shaders first
+const vertexShaderSource = `
+attribute vec2 a_position;
+uniform vec2 u_resolution;
+uniform float u_angle;
+uniform vec2 u_translation;
+void main() {
+    float cosA = cos(u_angle);
+    float sinA = sin(u_angle);
+    vec2 rotatedPosition = vec2(
+        a_position.x * cosA - a_position.y * sinA,
+        a_position.x * sinA + a_position.y * cosA
+    );
+    vec2 position = rotatedPosition + u_translation;
+    vec2 zeroToOne = position / u_resolution;
+    vec2 zeroToTwo = zeroToOne * 2.0;
+    vec2 clipSpace = zeroToTwo - 1.0;
+    clipSpace = vec2(clipSpace.x, -clipSpace.y);
+    gl_Position = vec4(clipSpace, 0, 1);
+}`;
+
+const fragmentShaderSource = `
+precision mediump float;
+uniform vec4 u_color;
+void main() {
+    gl_FragColor = u_color;
+}`;
+
+// Globals
+let gl, program;
+let positionAttributeLocation, resolutionUniformLocation, angleUniformLocation, translationUniformLocation, colorUniformLocation;
+
+let canvas;
+let scoreElement, livesElement, missilesElement, gameoverElement, highscoreDisplayElement, instructionsElement;
+
+const keys = {};
+let score = 0;
+let lives = 3;
+let missilesCount = 3;
+let gameOver = false;
+let highScore = 0;
+let level = 1; 
+let lastTime = 0;
+let musicPlaying = false;
+let gameStarted = false;
+let nextExtraLifeScore = 500;
+const ship = {x:400,y:300,angle:0,vx:0,vy:0,radius:10,shape:[{x:0,y:-10},{x:5,y:5},{x:-5,y:5}],alive:true};
+let asteroids=[];
+let bullets=[];
+let particles=[];
+let missileParticles=[];
+let guidedMissiles=[];
+let ufos=[];
+let bulletsUfo=[];
+let powerUp=null;
+let baseAsteroids=5;
+let nextUfoSpawnTime=5;
+let nextPowerUpTime;
+let powerUpLife=0;
+let audioContext;
+let shootBuffer, explosionBuffer, thrustBuffer, crashBuffer, ufoShootBuffer, playerExplosionBuffer, ufoExplosionBuffer, missileNoiseBuffer;
+let thrustSource=null;
+let missileSounds=new Map();
+
+try{
+    const storedHS=localStorage.getItem("asteroidsHighScore");
+    if(storedHS)highScore=parseInt(storedHS,10);
+}catch(e){highScore=0;}
+
+function getRandomInterval(){
+    let baseInterval = 20 - Math.min(level*2, 15); 
+    if(baseInterval<5) baseInterval=5; 
+    return baseInterval + Math.random()*baseInterval;
+}
+nextPowerUpTime = getRandomInterval();
+
+// Generic minor explosion
+function createExplosion(x,y,count=20,colors=[[1,1,1,1],[1,0,0,1],[1,1,0,1]]){
+    for(let i=0;i<count;i++){
+        let angle=Math.random()*Math.PI*2;
+        let speed=50+Math.random()*150;
+        let color=colors[Math.floor(Math.random()*colors.length)];
+        particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color:[...color]});
+    }
+}
+
+function handleInput(dt){
+    if(!ship.alive||gameOver||!gameStarted)return;
+    if(keys["ArrowLeft"])ship.angle-=3*dt;
+    if(keys["ArrowRight"])ship.angle+=3*dt;
+    if(keys["ArrowUp"]){
+        let ax=Math.sin(ship.angle)*100;
+        let ay=-Math.cos(ship.angle)*100;
+        ship.vx+=ax*dt; ship.vy+=ay*dt;
+        if(!thrustSource){thrustSource=playLoop(thrustBuffer);}
+    } else {
+        if(thrustSource){thrustSource.stop();thrustSource=null;}
+    }
+}
+
+function drawObject(points,x,y,angle,color){
+    gl.uniform2f(resolutionUniformLocation,800,600);
+    gl.uniform1f(angleUniformLocation,angle);
+    gl.uniform2f(translationUniformLocation,x,y);
+    gl.uniform4f(colorUniformLocation,...color);
+    let verts=[];
+    for(let p of points){verts.push(p.x,p.y);}
+    let buffer=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(verts),gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(positionAttributeLocation);
+    gl.vertexAttribPointer(positionAttributeLocation,2,gl.FLOAT,false,0,0);
+    gl.drawArrays(gl.LINE_LOOP,0,points.length);
+}
+
+function drawEllipse(cx,cy,rx,ry,segments=16){
+    let points=[];
+    for(let i=0;i<segments;i++){
+        let theta=2*Math.PI*i/segments;
+        let px=cx+rx*Math.cos(theta);
+        let py=cy+ry*Math.sin(theta);
+        points.push({x:px,y:py});
+    }
+    return points;
+}
+
+function drawUfo(x,y){
+    let topDome=drawEllipse(0,-5,10,5,20); drawObject(topDome,x,y,0,[0.8,0.8,1,1]);
+    let body=drawEllipse(0,0,20,8,20); drawObject(body,x,y,0,[0,1,1,1]);
+    let bottom=drawEllipse(0,5,18,6,20); drawObject(bottom,x,y,0,[0,0.5,0.5,1]);
+    let ring=drawEllipse(0,0,22,2,20); drawObject(ring,x,y,0,[0.5,1,1,1]);
+}
+
+function drawPowerUp(x,y){
+    let star=[];
+    let spikes=5;let outerRadius=15;let innerRadius=7;
+    for(let i=0;i<spikes*2;i++){
+        let r=(i%2===0)?outerRadius:innerRadius;
+        let angle=i*Math.PI/spikes;
+        star.push({x:Math.cos(angle)*r,y:Math.sin(angle)*r});
+    }
+    drawObject(star,x,y,0,[1,0.5,0,1]);
+}
+
+function spawnAsteroidsForLevel() {
+    let count = baseAsteroids + level*2;
+    for(let i=0;i<count;i++){
+        asteroids.push(createAsteroid());
+    }
+}
+
+function checkWaveCleared() {
+    if(!gameStarted)return;
+    if(asteroids.length===0 && ufos.length===0){
+        level++;
+        spawnAsteroidsForLevel();
+        nextUfoSpawnTime=5+Math.random()*10;
+    }
+}
+
+function createAsteroid(){
+    let x,y; let edge=Math.floor(Math.random()*4);
+    if(edge===0){x=Math.random()*800; y=0;}
+    else if(edge===1){x=800; y=Math.random()*600;}
+    else if(edge===2){x=Math.random()*800; y=600;}
+    else{x=0; y=Math.random()*600;}
+    let vx=(Math.random()-0.5)*50; let vy=(Math.random()-0.5)*50;
+    let radius=20+Math.random()*30;
+    let points=[];
+    let sides=Math.floor(6+Math.random()*4);
+    for(let i=0;i<sides;i++){
+        let angle=(Math.PI*2/sides)*i;
+        let r=radius*(0.7+Math.random()*0.3);
+        points.push({x:Math.cos(angle)*r,y:Math.sin(angle)*r});
+    }
+    return {x,y,vx,vy,radius,points,angle:Math.random()*Math.PI*2,spin:(Math.random()-0.5)*0.5};
+}
+
+function splitAsteroid(a) {
+    if(a.radius>15){
+        for(let i=0;i<2;i++){
+            let radius=a.radius/2;
+            let vx=(Math.random()-0.5)*100;
+            let vy=(Math.random()-0.5)*100;
+            let points=[];
+            let sides=Math.floor(6+Math.random()*4);
+            for(let j=0;j<sides;j++){
+                let angle=(Math.PI*2/sides)*j;
+                let r=radius*(0.7+Math.random()*0.3);
+                points.push({x:Math.cos(angle)*r,y:Math.sin(angle)*r});
+            }
+            asteroids.push({
+                x:a.x,y:a.y,vx: vx,vy: vy,
+                radius: radius,points: points,
+                angle: Math.random()*Math.PI*2,
+                spin: (Math.random()-0.5)*0.5
+            });
+        }
+    }
+}
+
+function shoot(){
+    if(!ship.alive||gameOver||!gameStarted)return;
+    bullets.push({x:ship.x,y:ship.y,vx:Math.sin(ship.angle)*300,vy:-Math.cos(ship.angle)*300,life:2});
+    playSound(shootBuffer);
+}
+
+function fireMissile(){
+    if(!ship.alive||gameOver||!gameStarted)return;
+    if(missilesCount>0){
+        missilesCount--;
+        updateMissilesCount();
+        let m={x:ship.x,y:ship.y,angle:ship.angle,speed:200,life:5};
+        guidedMissiles.push(m);
+        let source=playLoop(missileNoiseBuffer);
+        missileSounds.set(m,source);
+    }
+}
+
+function trySpawnUfo(dt) {
+    if(!gameStarted)return;
+    if(ufos.length<level){
+        nextUfoSpawnTime-=dt;
+        if(nextUfoSpawnTime<0){
+            spawnUfo();
+            nextUfoSpawnTime=5+Math.random()*10;
+        }
+    }
+}
+
+function spawnUfo(){
+    if(ufos.length>=level)return;
+    let side=Math.random()<0.5?'left':'right';
+    let x=(side==='left')?0:800;
+    let y=Math.random()*600;
+    let vx=(side==='left')?50:-50;
+    ufos.push({x,y,vx,radius:20,shootCooldown:2,alive:true});
+}
+
+function ufoShoot(ufo){
+    if(!ufo.alive||!ship.alive)return;
+    let dx=ship.x-ufo.x;let dy=ship.y-ufo.y;
+    let angle=Math.atan2(dx,-dy);
+    let speed=200;
+    bulletsUfo.push({x:ufo.x,y:ufo.y,vx:Math.sin(angle)*speed,vy:-Math.cos(angle)*speed,life:3});
+    playSound(ufoShootBuffer);
+}
+
+function createAsteroidExplosion(x,y){
+    let colors=[[0.6,0.6,0.6,1],[0.4,0.4,0.4,1],[0.8,0.8,0.8,1]];
+    for(let i=0;i<20;i++){
+        let angle=Math.random()*Math.PI*2;
+        let speed=50+Math.random()*150;
+        let color=colors[Math.floor(Math.random()*colors.length)];
+        particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color:[...color]});
+    }
+}
+
+function createMissileExplosion(x,y){
+    let colors=[[1,1,1,1],[1,1,0.5,1],[1,0.8,0.2,1]];
+    for(let i=0;i<15;i++){
+        let angle=Math.random()*Math.PI*2;
+        let speed=80+Math.random()*100;
+        let color=colors[Math.floor(Math.random()*colors.length)];
+        particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color:[...color]});
+    }
+}
+
+function createUfoExplosion(x,y){
+    let baseColors=[[0,1,1,1],[1,0,1,1],[0,1,0.5,1],[1,1,0,1],[1,0,0,1]];
+    for(let i=0;i<60;i++){
+        let angle=Math.random()*Math.PI*2;
+        let speed=100+Math.random()*200;
+        let color=baseColors[Math.floor(Math.random()*baseColors.length)];
+        particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1.5,color:[...color]});
+    }
+    for(let i=0;i<5;i++){
+        let angle=Math.random()*Math.PI*2;
+        let speed=80+Math.random()*120;
+        let spin=(Math.random()-0.5)*5;
+        let shapeColor=[Math.random(),Math.random(),Math.random(),1];
+        let shape=[{x:-5,y:-5},{x:5,y:-5},{x:5,y:5},{x:-5,y:5}];
+        particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:2,color:shapeColor,artifact:true,artifactShape:shape,artifactAngle:Math.random()*Math.PI*2,artifactSpin:spin});
+    }
+}
+
+function safeRespawn() {
+    for(let attempt=0;attempt<50;attempt++){
+        let rx=Math.random()*800;
+        let ry=Math.random()*600;
+        let safe=true;
+        for(let a of asteroids){
+            let dx=a.x-rx; let dy=a.y-ry;
+            if(dx*dx+dy*dy<(a.radius+30)*(a.radius+30)){safe=false;break;}
+        }
+        for(let u of ufos){
+            let dx=u.x-rx; let dy=u.y-ry;
+            if(dx*dx+dy*dy<(u.radius+50)*(u.radius+50)){safe=false;break;}
+        }
+        if(safe){
+            ship.x=rx;ship.y=ry;ship.vx=0;ship.vy=0;ship.angle=0;ship.alive=true;
+            return;
+        }
+    }
+    ship.x=400;ship.y=300;ship.vx=0;ship.vy=0;ship.angle=0;ship.alive=true;
+}
+
+function playerDestroyed(){
+    ship.alive=false;
+    playSound(crashBuffer);
+    playSound(playerExplosionBuffer);
+    for(let i=0;i<40;i++){
+        let angle=Math.random()*Math.PI*2;
+        let speed=50+Math.random()*150;
+        let color=[[1,1,1,1],[1,0,0,1],[1,1,0,1]][Math.floor(Math.random()*3)];
+        particles.push({x:ship.x,y:ship.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color:[...color]});
+    }
+    if(thrustSource){thrustSource.stop();thrustSource=null;}
+    lives--;updateLives();
+    if(lives>0){
+        setTimeout(()=>{safeRespawn();},1000);
+    }else{
+        setTimeout(()=>{endGame();},1500);
+    }
+}
+
+function endGame(){
+    if(score>highScore){
+        highScore=score;
+        try{localStorage.setItem("asteroidsHighScore",highScore.toString());}catch(e){}
+        highscoreDisplayElement.textContent="High Score: "+highScore;
+    }
+    showGameOver();
+}
+
+function showGameOver(){
+    gameOver=true;
+    let go=document.getElementById("gameover");
+    go.style.display="block";
+}
+
+function hideGameOver(){
+    let go=document.getElementById("gameover");
+    go.style.display="none";
+}
+
+function resetGame(){
+    gameOver=false;
+    score=0;lives=3;missilesCount=3;level=1;
+    nextExtraLifeScore=500;
+    updateScore();updateLives();updateMissilesCount();
+    hideGameOver();
+    ship.alive=true;ship.x=400;ship.y=300;ship.vx=0;ship.vy=0;ship.angle=0;
+    asteroids=[];bullets=[];particles=[];missileParticles=[];guidedMissiles=[];
+    ufos=[];bulletsUfo=[];powerUp=null;nextPowerUpTime=getRandomInterval();
+    nextUfoSpawnTime=5+Math.random()*10;
+    spawnAsteroidsForLevel();
+}
+
+function updateScore(){
+    scoreElement.textContent="Score: "+score;
+    if(score>=nextExtraLifeScore){
+        lives++;updateLives();
+        nextExtraLifeScore+=500;
+    }
+}
+
+function updateLives(){livesElement.textContent="Lives: "+lives;}
+function updateMissilesCount(){missilesElement.textContent="Missiles: "+missilesCount;}
+
+function checkCollisions(){
+    // Bullets vs Asteroids
+    for(let i=asteroids.length-1;i>=0;i--){
+        let a=asteroids[i];
+        for(let j=bullets.length-1;j>=0;j--){
+            let b=bullets[j];
+            let dx=a.x-b.x;let dy=a.y-b.y;
+            if(dx*dx+dy*dy<a.radius*a.radius){
+                playSound(explosionBuffer);
+                bullets.splice(j,1);
+                asteroids.splice(i,1);
+                score+=10;updateScore();
+                splitAsteroid(a);
+                createAsteroidExplosion(a.x,a.y);
+                break;
+            }
+        }
+    }
+
+    // Missiles vs Asteroids & UFO
+    for(let mIndex=guidedMissiles.length-1;mIndex>=0;mIndex--){
+        let m=guidedMissiles[mIndex];
+        let hitSomething=false;
+        for(let i=asteroids.length-1;i>=0;i--){
+            let a=asteroids[i];
+            let dx=a.x-m.x; let dy=a.y-m.y;
+            if(dx*dx+dy*dy<(a.radius*a.radius)){
+                playSound(explosionBuffer);
+                guidedMissiles.splice(mIndex,1);
+                stopMissileSound(m);
+                asteroids.splice(i,1);
+                score+=10;updateScore();
+                splitAsteroid(a);
+                createMissileExplosion(m.x,m.y);
+                createAsteroidExplosion(a.x,a.y);
+                hitSomething=true;
+                break;
+            }
+        }
+        if(hitSomething) continue;
+
+        for(let i=ufos.length-1;i>=0;i--){
+            let u=ufos[i];
+            let dx=u.x-m.x; let dy=u.y-m.y;
+            if(dx*dx+dy*dy<u.radius*u.radius){
+                playSound(ufoExplosionBuffer);
+                guidedMissiles.splice(mIndex,1);
+                stopMissileSound(m);
+                u.alive=false;
+                score+=100;updateScore();
+                createUfoExplosion(u.x,u.y);
+                break;
+            }
+        }
+    }
+    ufos=ufos.filter(u=>u.alive);
+
+    // Bullets vs UFO
+    for(let i=ufos.length-1;i>=0;i--){
+        let u=ufos[i];
+        for(let j=bullets.length-1;j>=0;j--){
+            let b=bullets[j];
+            let dx=u.x-b.x; let dy=u.y-b.y;
+            if(dx*dx+dy*dy<u.radius*u.radius){
+                playSound(ufoExplosionBuffer);
+                bullets.splice(j,1);
+                u.alive=false;
+                score+=100;updateScore();
+                createUfoExplosion(u.x,u.y);
+                break;
+            }
+        }
+    }
+    ufos=ufos.filter(u=>u.alive);
+
+    // Player bullets vs UFO bullets
+    for(let i=bulletsUfo.length-1;i>=0;i--){
+        let ub=bulletsUfo[i];
+        for(let j=bullets.length-1;j>=0;j--){
+            let pb=bullets[j];let dx=ub.x-pb.x;let dy=ub.y-pb.y;
+            if(dx*dx+dy*dy<16){
+                bulletsUfo.splice(i,1);
+                bullets.splice(j,1);
+                createExplosion(ub.x,ub.y,10,[[1,1,1,1],[0.5,0.5,1,1],[1,0.5,1,1]]);
+                break;
+            }
+        }
+    }
+
+    // Player collisions
+    if(ship.alive){
+        for(let a of asteroids){
+            let dx=a.x-ship.x;let dy=a.y-ship.y;
+            if(dx*dx+dy*dy<(a.radius+ship.radius)*(a.radius+ship.radius)){
+                playerDestroyed();
+                break;
+            }
+        }
+        for(let u of ufos){
+            let dx=u.x-ship.x;let dy=u.y-ship.y;
+            if(dx*dx+dy*dy<(u.radius+ship.radius)*(u.radius+ship.radius)){
+                playerDestroyed();
+                break;
+            }
+        }
+        for(let b of bulletsUfo){
+            let dx=b.x-ship.x; let dy=b.y-ship.y;
+            if(dx*dx+dy*dy<ship.radius*ship.radius){
+                playerDestroyed();
+                break;
+            }
+        }
+        if(powerUp){
+            let dx=powerUp.x-ship.x;let dy=powerUp.y-ship.y;
+            if(dx*dx+dy*dy<(powerUp.radius+ship.radius)*(powerUp.radius+ship.radius)){
+                missilesCount+=5;updateMissilesCount();
+                powerUp=null;
+                nextPowerUpTime=getRandomInterval();
+            }
+        }
+    }
+}
+
+function update(dt){
+    if(gameOver||!gameStarted)return;
+    handleInput(dt);
+    checkWaveCleared();
+
+    if(!powerUp){
+        nextPowerUpTime-=dt;
+        if(nextPowerUpTime<0){
+            powerUp={x:Math.random()*800,y:Math.random()*600,radius:15};
+            powerUpLife=10;
+        }
+    } else {
+        powerUpLife-=dt;
+        if(powerUpLife<0){
+            powerUp=null;nextPowerUpTime=getRandomInterval();
+        }
+    }
+
+    if(ship.alive){
+        ship.x=(ship.x+ship.vx*dt+800)%800;
+        ship.y=(ship.y+ship.vy*dt+600)%600;
+        ship.vx*=0.99;ship.vy*=0.99;
+    }
+
+    for(let i=bullets.length-1;i>=0;i--){
+        let b=bullets[i];
+        b.x=(b.x+b.vx*dt+800)%800;
+        b.y=(b.y+b.vy*dt+600)%600;
+        b.life-=dt;if(b.life<=0)bullets.splice(i,1);
+    }
+
+    for(let i=guidedMissiles.length-1;i>=0;i--){
+        let m=guidedMissiles[i];
+        let target=null;
+        let dist=Infinity;
+        for(let u of ufos){
+            let dx=u.x-m.x; let dy=u.y-m.y; let d=dx*dx+dy*dy;
+            if(d<dist){dist=d;target=u;}
+        }
+        if(target){
+            let dx=target.x-m.x;let dy=target.y-m.y;
+            let targetAngle=Math.atan2(dx,-dy);
+            let da=(targetAngle-m.angle+Math.PI*3)%(Math.PI*2)-Math.PI;
+            m.angle+=da*dt*2;
+        }
+        m.x=(m.x+Math.sin(m.angle)*m.speed*dt+800)%800;
+        m.y=(m.y - Math.cos(m.angle)*m.speed*dt+600)%600;
+        m.life-=dt;
+        if(m.life<=0){
+            guidedMissiles.splice(i,1);
+            stopMissileSound(m);
+        } else {
+            for(let k=0;k<2;k++){
+                let speed=50+Math.random()*50;
+                let a=m.angle+Math.PI+(Math.random()*0.3-0.15);
+                let color=(Math.random()<0.5)?[1,0.5,0,1]:[0.5,0.5,0.5,1];
+                missileParticles.push({x:m.x,y:m.y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,life:0.5,color:color});
+            }
+        }
+    }
+
+    for(let a of asteroids){
+        a.x=(a.x+a.vx*dt+800)%800;
+        a.y=(a.y+a.vy*dt+600)%600;
+        a.angle+=a.spin*dt;
+    }
+
+    trySpawnUfo(dt);
+    for(let u of ufos){
+        if(!u.alive)continue;
+        u.x+=u.vx*dt;
+        if(u.x<-50||u.x>850){u.alive=false;}
+        u.shootCooldown-=dt;
+        if(u.shootCooldown<0&&ship.alive){
+            ufoShoot(u);
+            u.shootCooldown=2+Math.random()*2;
+        }
+    }
+    ufos=ufos.filter(u=>u.alive);
+
+    for(let i=bulletsUfo.length-1;i>=0;i--){
+        let b=bulletsUfo[i];
+        b.x=(b.x+b.vx*dt+800)%800;
+        b.y=(b.y+b.vy*dt+600)%600;
+        b.life-=dt;if(b.life<=0)bulletsUfo.splice(i,1);
+    }
+
+    for(let i=particles.length-1;i>=0;i--){
+        let p=particles[i];
+        p.x+=p.vx*dt;p.y+=p.vy*dt;
+        if(p.artifact) p.artifactAngle+=p.artifactSpin*dt;
+        p.life-=dt;p.color[3]=p.life;if(p.life<=0)particles.splice(i,1);
+    }
+
+    for(let i=missileParticles.length-1;i>=0;i--){
+        let mp=missileParticles[i];
+        mp.x+=mp.vx*dt; mp.y+=mp.vy*dt;
+        mp.life-=dt; mp.color[3]=mp.life; if(mp.life<=0)missileParticles.splice(i,1);
+    }
+
+    checkCollisions();
+    checkWaveCleared();
+}
+
+function render(){
+    let now=performance.now()/1000;
+    let dt=now-lastTime;lastTime=now;
+
+    if(!gameOver && gameStarted){
+        handleInput(dt);
+        update(dt);
+    }
+
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    if(ship.alive && gameStarted){
+        drawObject(ship.shape,ship.x,ship.y,ship.angle,[1,1,1,1]);
+    }
+
+    if(gameStarted){
+        for(let b of bullets){
+            let bulletShape=[{x:-2,y:-2},{x:2,y:-2},{x:2,y:2},{x:-2,y:2}];
+            drawObject(bulletShape,b.x,b.y,0,[1,1,0,1]);
+        }
+
+        for(let m of guidedMissiles){
+            let shape=[{x:0,y:-5},{x:2,y:5},{x:-2,y:5}];
+            drawObject(shape,m.x,m.y,m.angle,[1,0,0,1]);
+        }
+
+        for(let a of asteroids){
+            drawObject(a.points,a.x,a.y,a.angle,[0.7,0.7,0.7,1]);
+        }
+
+        for(let u of ufos){
+            drawUfo(u.x,u.y);
+        }
+
+        for(let b of bulletsUfo){
+            let bulletShape=[{x:-2,y:-2},{x:2,y:-2},{x:2,y:2},{x:-2,y:2}];
+            drawObject(bulletShape,b.x,b.y,0,[1,0,1,1]);
+        }
+
+        for(let p of particles){
+            if(p.artifact){
+                let cosA=Math.cos(p.artifactAngle);
+                let sinA=Math.sin(p.artifactAngle);
+                let shape = p.artifactShape.map(pt=>{
+                    return {
+                        x: pt.x*cosA - pt.y*sinA,
+                        y: pt.x*sinA + pt.y*cosA
+                    };
+                });
+                drawObject(shape,p.x,p.y,0,p.color);
+            } else {
+                let shape=[{x:0,y:-2},{x:1,y:1},{x:-1,y:1}];
+                drawObject(shape,p.x,p.y,0,p.color);
+            }
+        }
+
+        for(let mp of missileParticles){
+            let shape=[{x:0,y:-1},{x:0.5,y:0.5},{x:-0.5,y:0.5}];
+            drawObject(shape,mp.x,mp.y,0,mp.color);
+        }
+
+        if(powerUp){
+            drawPowerUp(powerUp.x,powerUp.y);
+        }
+    }
+
+    requestAnimationFrame(render);
+}
+
+function initWebGL(){
+    canvas=document.getElementById("gameCanvas");
+    gl=canvas.getContext("webgl");
+    if(!gl){alert("WebGL not supported!");return;}
+
+    let vs=compileShader(gl,vertexShaderSource,gl.VERTEX_SHADER);
+    let fs=compileShader(gl,fragmentShaderSource,gl.FRAGMENT_SHADER);
+    program=linkProgram(gl,vs,fs);
+    gl.useProgram(program);
+
+    positionAttributeLocation=gl.getAttribLocation(program,"a_position");
+    resolutionUniformLocation=gl.getUniformLocation(program,"u_resolution");
+    angleUniformLocation=gl.getUniformLocation(program,"u_angle");
+    translationUniformLocation=gl.getUniformLocation(program,"u_translation");
+    colorUniformLocation=gl.getUniformLocation(program,"u_color");
+}
+
+function compileShader(gl,source,type){
+    let shader=gl.createShader(type);
+    gl.shaderSource(shader,source);
+    gl.compileShader(shader);
+    if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){
+        console.error(gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+    }
+    return shader;
+}
+function linkProgram(gl,vs,fs){
+    let prog=gl.createProgram();
+    gl.attachShader(prog,vs);
+    gl.attachShader(prog,fs);
+    gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){
+        console.error(gl.getProgramInfoLog(prog));
+        return null;
+    }
+    return prog;
+}
+
+function playSound(buffer) {
+    if(!audioContext)return;
+    let source=audioContext.createBufferSource();
+    source.buffer=buffer;
+    source.connect(audioContext.destination);
+    source.start();
+}
+
+function playLoop(buffer) {
+    let source=audioContext.createBufferSource();
+    source.buffer=buffer;
+    source.loop=true;
+    source.connect(audioContext.destination);
+    source.start();
+    return source;
+}
+
+function stopMissileSound(missile) {
+    let source=missileSounds.get(missile);
+    if(source){
+        source.stop();
+        missileSounds.delete(missile);
+    }
+}
+
+function createWhiteNoiseBuffer(ctx,duration=1) {
+    let sr=ctx.sampleRate;
+    let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);
+    let data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++){
+        data[i]=(Math.random()*2-1);
+    }
+    return buffer;
+}
+
+function createMissileNoiseBuffer(ctx){
+    return createWhiteNoiseBuffer(ctx,2);
+}
+
+function createShootSound(ctx){
+    let duration=0.1;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);
+    let data=buffer.getChannelData(0);
+    let freq=800;
+    for(let i=0;i<length;i++){
+        let t=i/sr;let env=Math.exp(-20*t);
+        data[i]=Math.sin(2*Math.PI*freq*t)*env;
+    }
+    return buffer;
+}
+
+function createAsteroidExplosionSound(ctx){
+    let duration=0.2;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);let data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++){
+        let t=i/sr;let env=Math.exp(-10*t);
+        data[i]=(Math.random()*2-1)*env;
+    }
+    return buffer;
+}
+
+function createThrustSound(ctx){
+    let duration=0.5;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);let data=buffer.getChannelData(0);
+    let freq=50;
+    for(let i=0;i<length;i++){
+        let t=i/sr;
+        let saw=((t*freq)%1)*2-1;
+        data[i]=saw*0.3;
+    }
+    return buffer;
+}
+
+function createCrashSound(ctx){
+    let duration=0.3;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);let data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++){
+        let t=i/sr;let env=Math.exp(-20*t);
+        data[i]=(Math.random()*2-1)*env*0.7;
+    }
+    return buffer;
+}
+
+function createUfoShootSound(ctx){
+    let duration=0.1;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);
+    let data=buffer.getChannelData(0);
+    let freq=600;
+    for(let i=0;i<length;i++){
+        let t=i/sr;let env=Math.exp(-30*t);
+        data[i]=Math.sin(2*Math.PI*freq*t)*env;
+    }
+    return buffer;
+}
+
+function createPlayerExplosionSound(ctx){
+    let duration=0.5;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);
+    let data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++){
+        let t=i/sr;let env=Math.exp(-4*t);
+        let noise=(Math.random()*2-1)*env;
+        let tone=Math.sin(2*Math.PI*100*t)*env*0.3;
+        data[i]=(noise+tone)*0.7;
+    }
+    return buffer;
+}
+
+function createUfoExplosionSound(ctx){
+    let duration=0.5;let sr=ctx.sampleRate;let length=sr*duration;
+    let buffer=ctx.createBuffer(1,length,sr);
+    let data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++){
+        let t=i/sr;let env=Math.exp(-3*t);
+        let freq=200+Math.random()*200;
+        let tone=Math.sin(2*Math.PI*freq*t)*env;
+        data[i]=tone*(Math.random()*0.5+0.5);
+    }
+    return buffer;
+}
+
+function startMusic() {
+    if(!audioContext||musicPlaying)return;
+    let musicGain=audioContext.createGain();
+    musicGain.gain.value=0.075;
+    musicGain.connect(audioContext.destination);
+
+    musicPlaying=true;
+    const noteLength=0.25;
+    let step=0;
+    const patterns=[
+        {bass:[82,82,98,103.8],lead:[329.63,392,440]},
+        {bass:[110,110,130.81,146.83],lead:[493.88,523.25,587.33]},
+        {bass:[73.42,73.42,82,87.31],lead:[311.13,349.23,392]},
+        {bass:[65.41,65.41,77.78,82],lead:[261.63,293.66,329.63]}
+    ];
+    let patternIndex=0;
+
+    function scheduleNote(time,freq,volume=1,type='square'){
+        let osc=audioContext.createOscillator();
+        let env=audioContext.createGain();
+        env.gain.value=0; env.connect(musicGain);
+        osc.connect(env);
+        osc.type=type;
+        osc.frequency.setValueAtTime(freq,time);
+        env.gain.setValueAtTime(0,time);
+        env.gain.linearRampToValueAtTime(0.7*volume,time+0.01);
+        env.gain.linearRampToValueAtTime(0,time+noteLength*0.9);
+        osc.start(time);
+        osc.stop(time+noteLength);
+    }
+
+    setInterval(()=>{
+        let now=audioContext.currentTime;
+        let p=patterns[patternIndex%patterns.length];
+        let bassNote=p.bass[step%p.bass.length];
+        scheduleNote(now,bassNote,0.8,'sawtooth');
+        if(step%8===0){
+            let leadNote=p.lead[Math.floor(Math.random()*p.lead.length)];
+            scheduleNote(now+noteLength*0.5,leadNote*2,0.5,'triangle');
+        }
+        step++;
+        if(step%32===0)patternIndex++;
+    },noteLength*1000);
+}
+
+window.addEventListener("keydown",function(e){
+    keys[e.key]=true;
+    if(e.key===" "){
+        if(gameOver){
+            resetGame();
+        } else if(!gameStarted){
+            gameStarted=true;
+            let instructions=document.getElementById("instructions");
+            instructions.style.display="none";
+        }
+    }
+    if(e.key===" "&&!gameOver&&gameStarted){
+        shoot();
+    }
+    if(e.key.toLowerCase()==='f'&&!gameOver&&gameStarted){
+        fireMissile();
+    }
+});
+window.addEventListener("keyup",function(e){
+    keys[e.key]=false;
+});
+
+function main(){
+    scoreElement=document.getElementById("score");
+    livesElement=document.getElementById("lives");
+    missilesElement=document.getElementById("missilesDisplay");
+    gameoverElement=document.getElementById("gameover");
+    highscoreDisplayElement=document.getElementById("highscoreDisplay");
+    instructionsElement=document.getElementById("instructions");
+
+    highscoreDisplayElement.textContent="High Score: "+highScore;
+    initWebGL();
+
+    audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    shootBuffer=createShootSound(audioContext);
+    explosionBuffer=createAsteroidExplosionSound(audioContext);
+    thrustBuffer=createThrustSound(audioContext);
+    crashBuffer=createCrashSound(audioContext);
+    ufoShootBuffer=createUfoShootSound(audioContext);
+    playerExplosionBuffer=createPlayerExplosionSound(audioContext);
+    ufoExplosionBuffer=createUfoExplosionSound(audioContext);
+    missileNoiseBuffer=createMissileNoiseBuffer(audioContext);
+
+    startMusic();
+
+    spawnAsteroidsForLevel();
+
+    lastTime=performance.now()/1000;
+    requestAnimationFrame(render);
+}
+
+window.onload=main;
+</script>
+<footer style="position: absolute; bottom: 0; width: 100%; text-align: center; font-size: 12px; color: #aaa; margin-bottom: 10px;">
+  <a href="https://store.steampowered.com/app/2953660/Amazing_Curves_Racing/" 
+    style="display:block; margin-bottom:10px; font-size: 16px; color:#009f00; text-decoration:none;"
+    target="_blank" 
+    onmouseover="this.style.color='#ffff00'" 
+    onmouseout="this.style.color='#009f00'" 
+    onmousedown="this.style.color='#ff0000'" 
+    onmouseup="this.style.color='#ffff00'">
+    If you enjoy fun physics-based games, click here to see <i><b>Amazing Curves Racing!</b></i>
+  </a>
+  &copy; 2024 Brightland Florida Corporation. All rights reserved.
+</footer>
+</body>
+</html>
