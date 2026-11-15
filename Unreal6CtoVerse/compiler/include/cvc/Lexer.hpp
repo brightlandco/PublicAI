@@ -1,5 +1,4 @@
 #pragma once
-
 #include "Diagnostics.hpp"
 #include "Token.hpp"
 #include <string>
@@ -7,12 +6,10 @@
 #include <vector>
 
 namespace cvc {
-
 class Lexer {
 public:
   Lexer(std::string filePath, std::string_view source, DiagnosticEngine& diag);
   std::vector<Token> tokenize();
-
 private:
   char peek(size_t offset = 0) const;
   char advance();
@@ -20,7 +17,6 @@ private:
   Token scanIdentifierOrKeyword();
   Token scanNumber();
   Token scanString();
-
   std::string filePath_;
   std::string_view src_;
   DiagnosticEngine& diag_;
@@ -28,5 +24,4 @@ private:
   uint32_t line_ = 1;
   uint32_t col_ = 1;
 };
-
-} // namespace cvc
+}

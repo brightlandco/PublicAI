@@ -19,6 +19,6 @@ Game<public> := module:
     GetOrCreateWallet<public>(P : player)<transacts> : wallet =
       if (Existing := PlayerWallets[P]):
         return Existing
-      Created := wallet{}
+      var Created : any = wallet{}
       set PlayerWallets[P] = Created
       return Created

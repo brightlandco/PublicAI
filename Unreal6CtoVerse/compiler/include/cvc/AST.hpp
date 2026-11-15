@@ -5,7 +5,6 @@
 #include <memory>
 
 namespace cvc {
-
 enum class ExprKind { Identifier, Literal, Binary, Unary, Call, Subscript, MemberAccess, FailableCall, New };
 struct Expr {
   ExprKind kind;
@@ -21,10 +20,10 @@ struct Stmt {
   std::shared_ptr<Expr> expr;
   std::vector<std::shared_ptr<Stmt>> body;
   std::shared_ptr<Stmt> elseBranch;
-  std::shared_ptr<Stmt> varDeclCond; // for if(auto x = ...)
+  std::shared_ptr<Stmt> varDeclCond;
   std::string varName;
   std::string varType;
-  bool isMut = false;
+  bool isConst = false;
   std::shared_ptr<Expr> varInit;
 };
 
@@ -42,7 +41,7 @@ struct FieldDecl {
   std::string access = "private";
   std::string name;
   std::string type;
-  bool isMut = false;
+  bool isConst = false;
   std::shared_ptr<Expr> init;
 };
 
@@ -67,5 +66,4 @@ struct CompilationUnit {
   std::vector<GlobalFuncDecl> funcs;
   std::vector<FieldDecl> moduleVars;
 };
-
 } // namespace cvc

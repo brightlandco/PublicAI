@@ -1,8 +1,7 @@
 namespace Game::Intro;
-
 public class Greeter {
   public string Prefix = "Welcome to UE6";
-  private mut int GreetCount = 0;
+  private int GreetCount = 0;
 
   public string FormatGreeting(string playerName) {
     GreetCount += 1;

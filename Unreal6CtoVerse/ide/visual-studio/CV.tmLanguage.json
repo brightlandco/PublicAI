@@ -1,6 +1,1 @@
-{
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "CV (C++ for Verse)",
-  "scopeName": "source.cv",
-  "fileTypes": ["cv"]
-}
+{}

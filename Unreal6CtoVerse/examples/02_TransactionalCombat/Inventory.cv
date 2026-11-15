@@ -1,15 +1,13 @@
 namespace Game::Economy;
 
 public class Wallet {
-  private mut int Gold = 100;
-  private mut int Gems = 5;
+  private int Gold = 100;
+  private int Gems = 5;
 
   public int GetGold() const {
     return Gold;
   }
 
-  // 'failable' + state mutation infers <decides><transacts>
-  // If GrantItemToPlayer() fails, Gold and Gems roll back automatically.
   public failable void PurchaseItem(Player buyer, int goldCost, int gemCost) {
     if (Gold < goldCost || Gems < gemCost) fail;
 
