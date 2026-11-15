@@ -9,7 +9,7 @@
     <CvSourceFiles Include="$(ProjectDir)**\*.cv" />
   </ItemGroup>
 
-  <!-- Incremental Transpilation: runs only when .cv files are newer than emitted .verse files -->
+  <!-- Incremental Transpilation -->
   <Target Name="TranspileCvToVerse"
           BeforeTargets="BeforeBuild;Build"
           Inputs="@(CvSourceFiles)"

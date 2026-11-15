@@ -230,13 +230,20 @@ cmake --build build --config Release
 ```
 
 ### Transpile a `.cv` File
+
+**On macOS/Linux:**
 ```bash
-./build/Release/cvc examples/02_TransactionalCombat/Inventory.cv -o out/Inventory.verse --sourcemap
+./build/cvc examples/02_TransactionalCombat/Inventory.cv -o out/Inventory.verse --sourcemap
+```
+
+**On Windows:**
+```cmd
+.\build\Release\cvc.exe examples\02_TransactionalCombat\Inventory.cv -o out\Inventory.verse --sourcemap
 ```
 
 ### Visual Studio Project Integration
 Import `ide/visual-studio/CV.Build.targets` into your `.vcxproj` or UE6 project file:
 ```xml
-<Import Project="$(SolutionDir)Tools\cvc\ideisual-studio\CV.Build.targets" />
+<Import Project="$(SolutionDir)Tools\cvc\ide\visual-studio\CV.Build.targets" />
 ```
 Pressing **Build (`Ctrl+Shift+B`)** automatically transpiles modified `.cv` files into your Verse source directory before Unreal Build Tool / Verse compilation runs, routing any compiler diagnostics directly into the Visual Studio **Error List**.

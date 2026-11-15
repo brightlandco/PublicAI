@@ -49,7 +49,12 @@ const std::unordered_map<std::string_view, TokenKind> kKeywords = {
 } // namespace
 
 Lexer::Lexer(std::string filePath, std::string_view source, DiagnosticEngine& diag)
-    : filePath_(std::move(filePath)), src_(source), diag_(diag) {}
+    : filePath_(std::move(filePath)), src_(source), diag_(diag) {
+    // Skip UTF-8 BOM if present
+    if (src_.size() >= 3 && src_[0] == '\xEF' && src_[1] == '\xBB' && src_[2] == '\xBF') {
+        pos_ = 3;
+    }
+}
 
 char Lexer::peek(size_t offset) const {
     return (pos_ + offset < src_.size()) ? src_[pos_ + offset] : '\0';
@@ -220,9 +225,14 @@ std::vector<Token> Lexer::tokenize() {
             case '|':
                 if (peek() == '|') { advance(); tokens.push_back({TokenKind::PipePipe, "||", loc}); }
                 break;
-            default:
-                diag_.report(filePath_, loc, Severity::Error, "CV1001", "Unexpected character in source.");
+            default: {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "Unexpected character '%c' (0x%02X) in source.",
+                         std::isprint(static_cast<unsigned char>(c)) ? c : '?',
+                         static_cast<unsigned char>(c));
+                diag_.report(filePath_, loc, Severity::Error, "CV1001", buf);
                 break;
+            }
         }
     }
     return tokens;

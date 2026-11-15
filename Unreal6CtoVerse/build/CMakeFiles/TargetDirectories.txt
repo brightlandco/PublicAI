@@ -1,0 +1,3 @@
+/Users/john/Development/PublicAI/Unreal6CtoVerse/build/CMakeFiles/cvc.dir
+/Users/john/Development/PublicAI/Unreal6CtoVerse/build/CMakeFiles/edit_cache.dir
+/Users/john/Development/PublicAI/Unreal6CtoVerse/build/CMakeFiles/rebuild_cache.dir

@@ -3,7 +3,7 @@
     "owner": "cvc",
     "fileLocation": ["relative", "${workspaceFolder}"],
     "pattern": {
-      "regexp": "^(.*)\\((\\d+),(\\d+)\\):\\s+(warning|error)\\s+(CV\\d+):\\s+(.*)$",
+      "regexp": "^(.*)\\((.*)$",
       "file": 1,
       "line": 2,
       "column": 3,

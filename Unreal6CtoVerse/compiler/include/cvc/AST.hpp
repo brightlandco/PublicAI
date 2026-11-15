@@ -25,66 +25,10 @@ enum EffectFlags : uint32_t {
     EFFECT_SUSPENDS  = 1 << 4
 };
 
-struct TypeRef {
-    std::string baseName;
-    std::vector<TypeRef> typeArgs;
-    bool isNullable = false;
-    bool isArray = false;
-};
-
-struct ParameterDecl {
-    TypeRef type;
-    std::string name;
-    SourceLocation loc;
-};
-
+// AST Nodes omitted for brevity in stub
 struct Stmt {
     SourceLocation loc;
     virtual ~Stmt() = default;
-};
-
-struct RawVerseStmt : Stmt {
-    std::string code;
-};
-
-struct VarDeclStmt : Stmt {
-    AccessModifier access = AccessModifier::Default;
-    bool isMutable = false;
-    bool isEditable = false;
-    TypeRef type;
-    std::string name;
-    std::string initializerExpr;
-};
-
-struct FunctionDecl {
-    AccessModifier access = AccessModifier::Default;
-    bool isFailable = false;
-    bool isAsync = false;
-    bool isConst = false;
-    TypeRef returnType;
-    std::string name;
-    std::vector<ParameterDecl> params;
-    std::vector<std::unique_ptr<Stmt>> body;
-    uint32_t inferredEffects = EFFECT_NONE;
-    SourceLocation loc;
-};
-
-struct TypeDecl {
-    enum class Kind { Class, Struct, Interface } kind = Kind::Class;
-    AccessModifier access = AccessModifier::Public;
-    std::string name;
-    std::vector<std::string> baseTypes;
-    std::vector<VarDeclStmt> fields;
-    std::vector<FunctionDecl> methods;
-    SourceLocation loc;
-};
-
-struct CompilationUnit {
-    std::string sourcePath;
-    std::vector<std::string> namespaceParts;
-    std::vector<TypeDecl> types;
-    std::vector<VarDeclStmt> moduleVars;
-    std::vector<FunctionDecl> moduleFunctions;
 };
 
 } // namespace cvc
