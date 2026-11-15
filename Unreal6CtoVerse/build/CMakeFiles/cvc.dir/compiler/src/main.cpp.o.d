@@ -958,6 +958,9 @@ CMakeFiles/cvc.dir/compiler/src/main.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/print \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h \
   /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/Lexer.hpp \
+  /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/Parser.hpp \
+  /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/AST.hpp \
+  /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/VerseEmitter.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/fstream \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/filesystem \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/copy_options.h \

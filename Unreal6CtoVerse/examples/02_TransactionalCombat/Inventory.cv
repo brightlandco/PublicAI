@@ -1,4 +1,32 @@
 namespace Game::Economy;
+
 public class Wallet {
-    private mut int Gold = 100;
+  private mut int Gold = 100;
+  private mut int Gems = 5;
+
+  public int GetGold() const {
+    return Gold;
+  }
+
+  // 'failable' + state mutation infers <decides><transacts>
+  // If GrantItemToPlayer() fails, Gold and Gems roll back automatically.
+  public failable void PurchaseItem(Player buyer, int goldCost, int gemCost) {
+    if (Gold < goldCost || Gems < gemCost) fail;
+
+    Gold -= goldCost;
+    Gems -= gemCost;
+
+    GrantItemToPlayer(buyer)?;
+  }
+}
+
+private WeakMap<Player, Wallet> PlayerWallets;
+
+public Wallet GetOrCreateWallet(Player p) {
+  if (auto existing = PlayerWallets[p]) {
+    return existing;
+  }
+  auto created = new Wallet();
+  PlayerWallets[p] = created;
+  return created;
 }

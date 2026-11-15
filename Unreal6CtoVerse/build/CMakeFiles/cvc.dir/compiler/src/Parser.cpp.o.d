@@ -1,5 +1,6 @@
 CMakeFiles/cvc.dir/compiler/src/Parser.cpp.o: \
   /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/src/Parser.cpp \
+  /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/Parser.hpp \
   /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/AST.hpp \
   /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/Token.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstdint \
@@ -903,6 +904,7 @@ CMakeFiles/cvc.dir/compiler/src/Parser.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstdarg \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temp_value.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__split_buffer \
+  /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/Lexer.hpp \
   /Users/john/Development/PublicAI/Unreal6CtoVerse/compiler/include/cvc/Diagnostics.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iostream \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/istream \

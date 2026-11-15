@@ -1,2 +1,2 @@
 Game<public> := module:
-    Economy<public> := module:
+  Economy<public> := module:

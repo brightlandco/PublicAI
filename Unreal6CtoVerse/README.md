@@ -8,6 +8,27 @@
 
 ---
 
+## ⚠️ Project Status: Initial Prototype
+
+**CV is currently in the proof-of-concept / prototype stage.** 
+
+### What it does exactly (v0.1):
+* **Lexical & AST Parsing:** Implements a dependency-free, C++20 hand-rolled Lexer and Recursive-Descent Parser that converts `.cv` source into an Abstract Syntax Tree (AST).
+* **Structural Lowering:** Accurately maps C++ idioms to Verse equivalents (e.g., modules, classes, structs, methods, fields).
+* **State Mutation:** Translates C++ `mut` variables and assignment operators (`-=`, `+=`, `=`) into Verse's strict `var` and `set` keywords.
+* **Failure Contexts:** Translates `failable` functions, trailing `?` propagation, `fail;` statements, and C++-style `if (auto val = ...)` bindings into Verse's `false?` and `if (Val := ...):` failure blocks.
+* **Deterministic Emitter:** Generates cleanly formatted, 2-space indented `.verse` code natively from the AST.
+
+### Future Direction for Development
+To evolve from a working prototype into a full, production-ready language and toolchain, the following milestones are needed:
+1. **Semantic Analysis & Type Checking:** Implement a full multi-file symbol table to enforce type safety, validate method calls, and reject invalid C++ idioms *before* emission.
+2. **Call-Graph Effect Inference:** Complete the Tarjan SCC fixed-point pass to automatically infer `<reads>`, `<transacts>`, and `<computes>` without the user having to write them.
+3. **Comprehensions & Arrays:** Expand the AST to support Verse's powerful `for` comprehensions, parametric types, and dynamic array (`[]t`) operations.
+4. **Source Maps (`.verse.map`):** Wire the parser's positional tokens to generate JSON source maps, ensuring downstream Epic compiler errors point directly back to the original `.cv` lines/columns.
+5. **LSP Proxy (`cvc-lsp`):** Build the lightweight Language Server Protocol wrapper to provide real-time VS Code / Visual Studio autocomplete and hover support by delegating to Epic's `verse-lsp`.
+
+---
+
 ## Why CV?
 
 Unreal Engine 6 introduces software transactional memory, failure-as-control-flow, and structured concurrency to gameplay programming through **Verse** and the **Scene Graph**. Those *runtime semantics* are a major leap forward for deterministic simulation and multiplayer state safety.
@@ -18,7 +39,7 @@ However, Verse's *surface syntax* (`:=`, `set`, `[]` failable invocations, `<dec
 
 * **Zero Runtime Overhead:** `cvc` is a pure ahead-of-time source-to-source transpiler (`file.cv` -> `file.verse`). There is no VM, no wrapper runtime, and no FFI marshaling penalty.
 * **100% Bidirectional Interop:** Emitted `.verse` code is clean, formatted, and directly callable from native Verse modules—and native Verse APIs are directly callable from `.cv`.
-* **Automatic Effect Inference:** Write `failable` or `async`; `cvc` infers `<computes>`, `<reads>`, `<transacts>`, `<decides>`, and `<suspends>` across the call graph.
+* **Automatic Effect Inference:** Write `failable` or `async`; `cvc` infers `<computes>`, `<reads>`, `<transacts>`, `<decides>`, and `<suspends>` across the call graph (planned).
 * **First-Class Visual Studio Integration:** Drop-in MSBuild `.targets` hooks and JSON source maps let you compile on `Ctrl+Shift+B` and double-click errors directly in the Visual Studio Error List.
 
 ---
@@ -41,37 +62,37 @@ In Verse, mutating state inside a failable function automatically rolls back if 
 namespace Game::Economy;
 
 public class Wallet {
-    private mut int Gold = 100;
-    private mut int Gems = 5;
+  private mut int Gold = 100;
+  private mut int Gems = 5;
 
-    public int GetGold() const {
-        return Gold;
-    }
+  public int GetGold() const {
+    return Gold;
+  }
 
-    // 'failable' + state mutation infers <decides><transacts>
-    // If GrantItemToPlayer() fails, Gold and Gems roll back.
-    public failable void PurchaseItem(
-        Player buyer, int goldCost, int gemCost)
-    {
-        if (Gold < goldCost || Gems < gemCost) fail;
+  // 'failable' + state mutation infers <decides><transacts>
+  // If GrantItemToPlayer() fails, Gold and Gems roll back.
+  public failable void PurchaseItem(
+    Player buyer, int goldCost, int gemCost)
+  {
+    if (Gold < goldCost || Gems < gemCost) fail;
 
-        Gold -= goldCost;
-        Gems -= gemCost;
+    Gold -= goldCost;
+    Gems -= gemCost;
 
-        // Trailing '?' propagates failure & rolls back
-        GrantItemToPlayer(buyer)?;
-    }
+    // Trailing '?' propagates failure & rolls back
+    GrantItemToPlayer(buyer)?;
+  }
 }
 
 private WeakMap<Player, Wallet> PlayerWallets;
 
 public Wallet GetOrCreateWallet(Player p) {
-    if (auto existing = PlayerWallets[p]) {
-        return existing;
-    }
-    auto created = new Wallet();
-    PlayerWallets[p] = created;
-    return created;
+  if (auto existing = PlayerWallets[p]) {
+    return existing;
+  }
+  auto created = new Wallet();
+  PlayerWallets[p] = created;
+  return created;
 }
 ```
 
@@ -80,30 +101,31 @@ public Wallet GetOrCreateWallet(Player p) {
 
 ```verse
 Game<public> := module:
-    Economy<public> := module:
-        wallet<public> := class:
-            var<private> Gold : int = 100
-            var<private> Gems : int = 5
+  Economy<public> := module:
+  wallet<public> := class:
+    var<private> Gold : int = 100
+    var<private> Gems : int = 5
 
-            GetGold<public>()<reads> : int =
-                return Gold
+    GetGold<public>()<reads> : int =
+    return Gold
 
-            PurchaseItem<public>(
-                Buyer : player, GoldCost : int, GemCost : int
-            )<decides><transacts> : void =
-                Gold >= GoldCost and Gems >= GemCost
-                set Gold -= GoldCost
-                set Gems -= GemCost
-                GrantItemToPlayer[Buyer]
+    PurchaseItem<public>(
+    Buyer : player, GoldCost : int, GemCost : int
+    )<decides><transacts> : void =
+    if (Gold < GoldCost or Gems < GemCost):
+      false?
+    set Gold -= GoldCost
+    set Gems -= GemCost
+    GrantItemToPlayer[Buyer]
 
-        var<private> PlayerWallets : weak_map(player, wallet) = map{}
+  var<private> PlayerWallets : weak_map(player, wallet) = map{}
 
-        GetOrCreateWallet<public>(P : player)<transacts> : wallet =
-            if (Existing := PlayerWallets[P]):
-                return Existing
-            Created := wallet{}
-            if (set PlayerWallets[P] = Created) {}
-            return Created
+  GetOrCreateWallet<public>(P : player)<transacts> : wallet =
+    if (Existing := PlayerWallets[P]):
+    return Existing
+    Created := wallet{}
+    set PlayerWallets[P] = Created
+    return Created
 ```
 
 </td>
@@ -126,29 +148,29 @@ Game<public> := module:
 namespace Game::Modes;
 
 public class CaptureZone : Component {
-    [[editable]] public float CaptureTime = 10.0;
-    [[editable]] public TriggerDevice ZoneTrigger;
+  [[editable]] public float CaptureTime = 10.0;
+  [[editable]] public TriggerDevice ZoneTrigger;
 
-    public async void RunCaptureLoop() {
-        loop {
-            Player agent = await ZoneTrigger.AgentEntersEvent.Await();
+  public async void RunCaptureLoop() {
+    loop {
+      Player agent = await ZoneTrigger.AgentEntersEvent.Await();
 
-            race {
-                {
-                    await Sleep(CaptureTime);
-                    OnZoneCaptured(agent);
-                }
-                {
-                    await ZoneTrigger.AgentExitsEvent.Await();
-                    OnCaptureCancelled();
-                }
-            }
+      race {
+        {
+          await Sleep(CaptureTime);
+          OnZoneCaptured(agent);
         }
+        {
+          await ZoneTrigger.AgentExitsEvent.Await();
+          OnCaptureCancelled();
+        }
+      }
     }
+  }
 
-    public void Start() {
-        spawn RunCaptureLoop();
-    }
+  public void Start() {
+    spawn RunCaptureLoop();
+  }
 }
 ```
 
@@ -157,63 +179,32 @@ public class CaptureZone : Component {
 
 ```verse
 Game<public> := module:
-    Modes<public> := module:
-        capture_zone<public> := class(component):
-            @editable
-            CaptureTime<public> : float = 10.0
+  Modes<public> := module:
+  capture_zone<public> := class(component):
+    @editable
+    CaptureTime<public> : float = 10.0
 
-            @editable
-            ZoneTrigger<public> : trigger_device = trigger_device{}
+    @editable
+    ZoneTrigger<public> : trigger_device = trigger_device{}
 
-            RunCaptureLoop<public>()<suspends> : void =
-                loop:
-                    Agent : player = ZoneTrigger.AgentEntersEvent.Await()
-                    race:
-                        block:
-                            Sleep(CaptureTime)
-                            OnZoneCaptured(Agent)
-                        block:
-                            ZoneTrigger.AgentExitsEvent.Await()
-                            OnCaptureCancelled()
+    RunCaptureLoop<public>()<suspends> : void =
+    loop:
+      Agent : player = ZoneTrigger.AgentEntersEvent.Await()
+      race:
+      block:
+        Sleep(CaptureTime)
+        OnZoneCaptured(Agent)
+      block:
+        ZoneTrigger.AgentExitsEvent.Await()
+        OnCaptureCancelled()
 
-            Start<public>() : void =
-                spawn { RunCaptureLoop() }
-```
+    Start<public>() : void =
+    spawn { RunCaptureLoop() }
+  ```
 
 </td>
 </tr>
 </table>
-
----
-
-## Repository Structure
-
-```text
-cvc/
-├── README.md                        # Project overview, side-by-side examples & quickstart
-├── LICENSE                          # MIT License
-├── CMakeLists.txt                   # C++20 build configuration for cvc
-├── docs/
-│   ├── 01-LANGUAGE-SPEC.md          # Formal syntax & semantic mapping rules
-│   ├── 02-EFFECT-INFERENCE.md       # Static call-graph effect inference rules
-│   ├── 03-DIAGNOSTICS-SOURCEMAPS.md # Two-stage error translation & JSON source maps
-│   └── 04-ARCHITECTURE.md           # Compiler pipeline & LSP proxy design
-├── compiler/
-│   ├── include/cvc/                 # Token, AST, Symbol/Effect, Emitter & SourceMap headers
-│   └── src/                         # Reference C++20 implementation (Lexer, Parser, CLI)
-├── ide/
-│   ├── visual-studio/
-│   │   ├── CV.Build.targets         # MSBuild incremental transpilation hook
-│   │   ├── CV.tmLanguage.json       # TextMate syntax grammar (VS 2022/2026 & VS Code)
-│   │   └── ProblemMatcher.json      # Error List regex integration
-│   └── lsp/
-│       └── DESIGN.md                # Thin LSP proxy architecture over Verse Language Server
-└── examples/
-    ├── 01_BasicsAndMutability/      # hello_world.cv & expected hello_world.verse
-    ├── 02_TransactionalCombat/      # Inventory.cv & expected Inventory.verse
-    ├── 03_StructuredConcurrency/    # CapturePoint.cv & expected CapturePoint.verse
-    └── 04_SceneGraphComponent/      # FlightThruster.cv & expected FlightThruster.verse
-```
 
 ---
 

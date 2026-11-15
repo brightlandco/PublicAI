@@ -1,4 +1,15 @@
 namespace Game::Intro;
+
 public class Greeter {
-    public string Prefix = "Welcome to UE6";
+  public string Prefix = "Welcome to UE6";
+  private mut int GreetCount = 0;
+
+  public string FormatGreeting(string playerName) {
+    GreetCount += 1;
+    return "{Prefix}, {playerName}! (Visit #{GreetCount})";
+  }
+
+  public int GetTotalGreets() const {
+    return GreetCount;
+  }
 }
