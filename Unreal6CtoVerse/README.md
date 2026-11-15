@@ -14,8 +14,8 @@
 
 ### What it does exactly (v0.1):
 * **Lexical & AST Parsing:** Implements a dependency-free, C++20 hand-rolled Lexer and Recursive-Descent Parser that converts `.cv` source into an Abstract Syntax Tree (AST).
-* **Structural Lowering:** Accurately maps C++ idioms to Verse equivalents (e.g., modules, classes, structs, methods, fields).
-* **State Mutation:** Translates C++ variables and assignment operators (`-=`, `+=`, `=`) into Verse's strict `var` and `set` keywords.
+* **Structural Lowering:** Accurately maps C++ idioms to Verse equivalents (e.g., modules, classes, structs, methods, fields) using C++-style block access (`public:`, `private:`).
+* **State Mutation:** Translates C++ variables (mutable by default, `const` for immutable) and assignment operators (`-=`, `+=`, `=`) into Verse's strict `var` and `set` keywords.
 * **Failure Contexts:** Translates `failable` functions, trailing `?` propagation, `fail;` statements, and C++-style `if (auto val = ...)` bindings into Verse's `false?` and `if (Val := ...):` failure blocks.
 * **Deterministic Emitter:** Generates cleanly formatted, 2-space indented `.verse` code natively from the AST.
 
@@ -48,7 +48,7 @@ However, Verse's *surface syntax* (`:=`, `set`, `[]` failable invocations, `<dec
 
 ### 1. Transactional Rollbacks, Failure Contexts & `weak_map`
 
-In Verse, mutating state inside a failable function automatically rolls back if a subsequent check fails. CV expresses this with clean C++/C# control flow while preserving exact Verse transactional semantics:
+In Verse, mutating state inside a failable function automatically rolls back if a subsequent check fails. CV expresses this with clean C++ block-scoped access and control flow while preserving exact Verse transactional semantics:
 
 <table>
 <tr>
@@ -61,27 +61,29 @@ In Verse, mutating state inside a failable function automatically rolls back if 
 ```cpp
 namespace Game::Economy;
 
-public class Wallet {
-  private int Gold = 100;
-  private int Gems = 5;
+class Wallet {
+  private:
+    int Gold = 100;
+    int Gems = 5;
 
-  public int GetGold() const {
-    return Gold;
-  }
+  public:
+    int GetGold() const {
+      return Gold;
+    }
 
-  // 'failable' + state mutation infers <decides><transacts>
-  // If GrantItemToPlayer() fails, Gold and Gems roll back.
-  public failable void PurchaseItem(
-    Player buyer, int goldCost, int gemCost)
-  {
-    if (Gold < goldCost || Gems < gemCost) fail;
+    // 'failable' + state mutation infers <decides><transacts>
+    // If GrantItemToPlayer() fails, Gold and Gems roll back.
+    failable void PurchaseItem(
+      Player buyer, int goldCost, int gemCost)
+    {
+      if (Gold < goldCost || Gems < gemCost) fail;
 
-    Gold -= goldCost;
-    Gems -= gemCost;
+      Gold -= goldCost;
+      Gems -= gemCost;
 
-    // Trailing '?' propagates failure & rolls back
-    GrantItemToPlayer(buyer)?;
-  }
+      // Trailing '?' propagates failure & rolls back
+      GrantItemToPlayer(buyer)?;
+    }
 }
 
 WeakMap<Player, Wallet> PlayerWallets;
@@ -102,30 +104,30 @@ Wallet GetOrCreateWallet(Player p) {
 ```verse
 Game<public> := module:
   Economy<public> := module:
-  wallet<public> := class:
-    var<private> Gold : int = 100
-    var<private> Gems : int = 5
+    wallet<public> := class:
+      var<private> Gold : int = 100
+      var<private> Gems : int = 5
 
-    GetGold<public>()<reads> : int =
-    return Gold
+      GetGold<public>()<reads> : int =
+        return Gold
 
-    PurchaseItem<public>(
-    Buyer : player, GoldCost : int, GemCost : int
-    )<decides><transacts> : void =
-    if (Gold < GoldCost or Gems < GemCost):
-      false?
-    set Gold -= GoldCost
-    set Gems -= GemCost
-    GrantItemToPlayer[Buyer]
+      PurchaseItem<public>(
+        Buyer : player, GoldCost : int, GemCost : int
+      )<decides><transacts> : void =
+        if (Gold < GoldCost or Gems < GemCost):
+          false?
+        set Gold -= GoldCost
+        set Gems -= GemCost
+        GrantItemToPlayer[Buyer]
 
-  var<private> PlayerWallets : weak_map(player, wallet) = map{}
+    var<public> PlayerWallets : weak_map(player, wallet) = map{}
 
-  GetOrCreateWallet<public>(P : player)<transacts> : wallet =
-    if (Existing := PlayerWallets[P]):
-    return Existing
-    Created := wallet{}
-    set PlayerWallets[P] = Created
-    return Created
+    GetOrCreateWallet<public>(P : player)<transacts> : wallet =
+      if (Existing := PlayerWallets[P]):
+        return Existing
+      var Created : any = wallet{}
+      set PlayerWallets[P] = Created
+      return Created
 ```
 
 </td>
@@ -153,25 +155,25 @@ class CaptureZone : Component {
     [[editable]] TriggerDevice ZoneTrigger;
 
     async void RunCaptureLoop() {
-    loop {
-      Player agent = await ZoneTrigger.AgentEntersEvent.Await();
+      loop {
+        Player agent = await ZoneTrigger.AgentEntersEvent.Await();
 
-      race {
-        {
-          await Sleep(CaptureTime);
-          OnZoneCaptured(agent);
-        }
-        {
-          await ZoneTrigger.AgentExitsEvent.Await();
-          OnCaptureCancelled();
+        race {
+          {
+            await Sleep(CaptureTime);
+            OnZoneCaptured(agent);
+          }
+          {
+            await ZoneTrigger.AgentExitsEvent.Await();
+            OnCaptureCancelled();
+          }
         }
       }
     }
-  }
 
     void Start() {
-    spawn RunCaptureLoop();
-  }
+      spawn RunCaptureLoop();
+    }
 }
 ```
 
@@ -181,27 +183,27 @@ class CaptureZone : Component {
 ```verse
 Game<public> := module:
   Modes<public> := module:
-  capture_zone<public> := class(component):
-    @editable
-    CaptureTime<public> : float = 10.0
+    capture_zone<public> := class(component):
+      @editable
+      CaptureTime<public> : float = 10.0
 
-    @editable
-    ZoneTrigger<public> : trigger_device = trigger_device{}
+      @editable
+      ZoneTrigger<public> : trigger_device = trigger_device{}
 
-    RunCaptureLoop<public>()<suspends> : void =
-    loop:
-      Agent : player = ZoneTrigger.AgentEntersEvent.Await()
-      race:
-      block:
-        Sleep(CaptureTime)
-        OnZoneCaptured(Agent)
-      block:
-        ZoneTrigger.AgentExitsEvent.Await()
-        OnCaptureCancelled()
+      RunCaptureLoop<public>()<suspends> : void =
+        loop:
+          Agent : player = ZoneTrigger.AgentEntersEvent.Await()
+          race:
+            block:
+              Sleep(CaptureTime)
+              OnZoneCaptured(Agent)
+            block:
+              ZoneTrigger.AgentExitsEvent.Await()
+              OnCaptureCancelled()
 
-    Start<public>() : void =
-    spawn { RunCaptureLoop() }
-  ```
+      Start<public>() : void =
+        spawn { RunCaptureLoop() }
+```
 
 </td>
 </tr>
