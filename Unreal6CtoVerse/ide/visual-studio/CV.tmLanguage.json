@@ -1,0 +1,65 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CV (C++ for Verse)",
+  "scopeName": "source.cv",
+  "fileTypes": ["cv"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#attributes" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#strings" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.cv", "match": "//.*$" },
+        { "name": "comment.block.cv", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        { "name": "meta.attribute.cv", "match": "\\[\\[\s*(editable|override|abstract)\s*\\]\\]" }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.cv",
+          "match": "\\b(if|else|for|loop|return|fail|break|continue|await|spawn|concurrent|race|rush)\\b"
+        },
+        {
+          "name": "storage.modifier.cv",
+          "match": "\\b(public|private|protected|internal|mut|const|failable|async|namespace|using)\\b"
+        },
+        {
+          "name": "storage.type.cv",
+          "match": "\\b(class|struct|interface|enum|new)\\b"
+        },
+        {
+          "name": "constant.language.cv",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.cv",
+          "match": "\\b(void|bool|int|float|string|auto|Map|WeakMap)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.double.cv", "begin": "\"", "end": "\"" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.cv", "match": "\\b[0-9]+(\\.[0-9]+)?\\b" }
+      ]
+    }
+  }
+}

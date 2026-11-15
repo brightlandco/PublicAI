@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <CvcCompilerPath Condition="'$(CvcCompilerPath)' == ''">$(MSBuildThisFileDirectory)..\..\build\Release\cvc.exe</CvcCompilerPath>
+    <CvVerseOutputDir Condition="'$(CvVerseOutputDir)' == ''">$(ProjectDir)Intermediate\Verse\</CvVerseOutputDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <CvSourceFiles Include="$(ProjectDir)**\*.cv" />
+  </ItemGroup>
+
+  <!-- Incremental Transpilation: runs only when .cv files are newer than emitted .verse files -->
+  <Target Name="TranspileCvToVerse"
+          BeforeTargets="BeforeBuild;Build"
+          Inputs="@(CvSourceFiles)"
+          Outputs="@(CvSourceFiles->'$(CvVerseOutputDir)%(RecursiveDir)%(Filename).verse')">
+    <MakeDir Directories="$(CvVerseOutputDir)" />
+    <Message Importance="High" Text="[cvc] Transpiling %(CvSourceFiles.Identity) -> $(CvVerseOutputDir)%(CvSourceFiles.Filename).verse" />
+    <Exec Command="&quot;$(CvcCompilerPath)&quot; &quot;%(CvSourceFiles.Identity)&quot; -o &quot;$(CvVerseOutputDir)%(CvSourceFiles.RecursiveDir)%(CvSourceFiles.Filename).verse&quot; --sourcemap"
+          CustomErrorRegularExpression="^.*\(\d+,\d+\):\s*error\s+CV\d+:.*$"
+          CustomWarningRegularExpression="^.*\(\d+,\d+\):\s*warning\s+CV\d+:.*$" />
+  </Target>
+
+  <Target Name="CleanCvGeneratedVerse" AfterTargets="Clean">
+    <RemoveDir Directories="$(CvVerseOutputDir)" />
+  </Target>
+</Project>
