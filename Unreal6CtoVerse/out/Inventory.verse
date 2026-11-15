@@ -14,7 +14,7 @@ Game<public> := module:
         set Gems -= GemCost
         GrantItemToPlayer[Buyer]
 
-    var<private> PlayerWallets : weak_map(player, wallet) = map{}
+    var<public> PlayerWallets : weak_map(player, wallet) = map{}
 
     GetOrCreateWallet<public>(P : player)<transacts> : wallet =
       if (Existing := PlayerWallets[P]):

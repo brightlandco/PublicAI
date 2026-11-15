@@ -1,27 +1,28 @@
 namespace Game::Modes;
 
-public class CaptureZone : Component {
-  [[editable]] public float CaptureTime = 10.0;
-  [[editable]] public TriggerDevice ZoneTrigger;
+class CaptureZone : Component {
+  public:
+    [[editable]] float CaptureTime = 10.0;
+    [[editable]] TriggerDevice ZoneTrigger;
 
-  public async void RunCaptureLoop() {
-    loop {
-      Player agent = await ZoneTrigger.AgentEntersEvent.Await();
+    async void RunCaptureLoop() {
+      loop {
+        Player agent = await ZoneTrigger.AgentEntersEvent.Await();
 
-      race {
-        {
-          await Sleep(CaptureTime);
-          OnZoneCaptured(agent);
-        }
-        {
-          await ZoneTrigger.AgentExitsEvent.Await();
-          OnCaptureCancelled();
+        race {
+          {
+            await Sleep(CaptureTime);
+            OnZoneCaptured(agent);
+          }
+          {
+            await ZoneTrigger.AgentExitsEvent.Await();
+            OnCaptureCancelled();
+          }
         }
       }
     }
-  }
 
-  public void Start() {
-    spawn RunCaptureLoop();
-  }
+    void Start() {
+      spawn RunCaptureLoop();
+    }
 }

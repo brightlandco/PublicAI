@@ -1,26 +1,28 @@
 namespace Game::Economy;
 
-public class Wallet {
-  private int Gold = 100;
-  private int Gems = 5;
+class Wallet {
+  private:
+    int Gold = 100;
+    int Gems = 5;
 
-  public int GetGold() const {
-    return Gold;
-  }
+  public:
+    int GetGold() const {
+      return Gold;
+    }
 
-  public failable void PurchaseItem(Player buyer, int goldCost, int gemCost) {
-    if (Gold < goldCost || Gems < gemCost) fail;
+    failable void PurchaseItem(Player buyer, int goldCost, int gemCost) {
+      if (Gold < goldCost || Gems < gemCost) fail;
 
-    Gold -= goldCost;
-    Gems -= gemCost;
+      Gold -= goldCost;
+      Gems -= gemCost;
 
-    GrantItemToPlayer(buyer)?;
-  }
+      GrantItemToPlayer(buyer)?;
+    }
 }
 
-private WeakMap<Player, Wallet> PlayerWallets;
+WeakMap<Player, Wallet> PlayerWallets;
 
-public Wallet GetOrCreateWallet(Player p) {
+Wallet GetOrCreateWallet(Player p) {
   if (auto existing = PlayerWallets[p]) {
     return existing;
   }

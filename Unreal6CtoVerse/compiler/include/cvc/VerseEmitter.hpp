@@ -16,4 +16,4 @@ private:
   std::string snakeCase(const std::string& s);
   std::string verseType(const std::string& t);
 };
-}
+} // namespace cvc

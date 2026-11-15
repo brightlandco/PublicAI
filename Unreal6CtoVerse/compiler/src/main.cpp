@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <filesystem>
+#include <system_error>
 
 int main(int argc, char** argv) {
   if (argc < 2) {
@@ -34,24 +35,38 @@ int main(int argc, char** argv) {
   buffer << in.rdbuf();
   std::string source = buffer.str();
 
+  std::cout << "[cvc] Lexing " << inputPath << "...\n";
   cvc::DiagnosticEngine diag;
   cvc::Lexer lexer(inputPath, source, diag);
   auto tokens = lexer.tokenize();
   if (diag.hasErrors()) { diag.flush(); return 1; }
+  std::cout << "[cvc] Lexer finished. Produced " << tokens.size() << " tokens.\n";
 
+  std::cout << "[cvc] Parsing AST...\n";
   cvc::Parser parser(tokens, diag);
   auto ast = parser.parse();
   if (diag.hasErrors()) { diag.flush(); return 1; }
-  std::cout << "cvc: parsed " << inputPath << " successfully.\n";
+  std::cout << "[cvc] Parser finished successfully.\n";
 
   if (!outputPath.empty()) {
+    std::cout << "[cvc] Emitting Verse code to " << outputPath << "...\n";
     std::filesystem::path outPath(outputPath);
-    if (outPath.has_parent_path()) std::filesystem::create_directories(outPath.parent_path());
+    if (outPath.has_parent_path()) {
+      std::error_code ec;
+      std::filesystem::create_directories(outPath.parent_path(), ec);
+      if (ec) {
+        std::cerr << "cvc: warning: failed to create directories: " << ec.message() << "\n";
+      }
+    }
     std::ofstream out(outputPath);
-    if (!out) { std::cerr << "cvc: error: could not open output file '" << outputPath << "'\n"; return 1; }
+    if (!out) { 
+      std::cerr << "cvc: error: could not open output file '" << outputPath << "'\n"; 
+      return 1; 
+    }
+    
     cvc::VerseEmitter emitter;
     emitter.emit(ast, out);
-    std::cout << "cvc: generated " << outputPath << "\n";
+    std::cout << "cvc: generated " << outputPath << " successfully!\n";
   }
   return 0;
 }

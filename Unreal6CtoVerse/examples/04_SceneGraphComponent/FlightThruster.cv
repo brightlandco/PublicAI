@@ -1,34 +1,38 @@
 namespace Game::Flight;
 
-public struct ThrusterTelemetry {
-  public float ThrustNewtons;
-  public float FuelRemaining;
+struct ThrusterTelemetry {
+  public:
+    float ThrustNewtons;
+    float FuelRemaining;
 }
 
-public class ThrusterComponent : Component {
-  [[editable]] public float MaxThrust = 45000.0;
-  [[editable]] public float BurnRate = 2.5;
+class ThrusterComponent : Component {
+  public:
+    [[editable]] float MaxThrust = 45000.0;
+    [[editable]] float BurnRate = 2.5;
 
-  private float Fuel = 100.0;
-  private ThrusterTelemetry? LastTelemetry = null;
+  private:
+    float Fuel = 100.0;
+    ThrusterTelemetry? LastTelemetry = null;
 
-  public failable ThrusterTelemetry ApplyThrottle(float throttle, float dt) {
-    if (throttle <= 0.0 || Fuel <= 0.0) fail;
+  public:
+    failable ThrusterTelemetry ApplyThrottle(float throttle, float dt) {
+      if (throttle <= 0.0 || Fuel <= 0.0) fail;
 
-    float clamped = Clamp(throttle, 0.0, 1.0);
-    float fuelUsed = BurnRate * clamped * dt;
-    if (Fuel < fuelUsed) fail;
+      float clamped = Clamp(throttle, 0.0, 1.0);
+      float fuelUsed = BurnRate * clamped * dt;
+      if (Fuel < fuelUsed) fail;
 
-    Fuel -= fuelUsed;
-    ThrusterTelemetry telemetry = ThrusterTelemetry{
-      ThrustNewtons = MaxThrust * clamped,
-      FuelRemaining = Fuel
-    };
-    LastTelemetry = telemetry;
-    return telemetry;
-  }
+      Fuel -= fuelUsed;
+      ThrusterTelemetry telemetry = ThrusterTelemetry{
+        ThrustNewtons = MaxThrust * clamped,
+        FuelRemaining = Fuel
+      };
+      LastTelemetry = telemetry;
+      return telemetry;
+    }
 
-  public float GetLastThrustOrZero() const {
-    return LastTelemetry?.ThrustNewtons ?? 0.0;
-  }
+    float GetLastThrustOrZero() const {
+      return LastTelemetry?.ThrustNewtons ?? 0.0;
+    }
 }
